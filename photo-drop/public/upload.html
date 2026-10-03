@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Upload photos</title><link rel="stylesheet" href="/style.css"></head><body><main>
+<h1 id="title">Upload photos</h1><p class="muted">Add your photos and videos — they go straight to the host's album.</p>
+<div class="card"><div class="drop" id="drop">Tap to choose photos or drop them here<input type="file" id="file" multiple accept="image/*,video/*" hidden></div><div id="msg"></div></div>
+<script>
+const $=id=>document.getElementById(id), token=location.pathname.split('/').pop();
+fetch('/api/guest/'+token).then(async r=>{if(!r.ok){$('title').textContent='Link not found';$('drop').remove();return}$('title').textContent=(await r.json()).title});
+async function send(files){
+  if(!files.length)return;$('msg').textContent='Uploading…';let ok=0;
+  for(const f of files){const fd=new FormData();fd.append('files',f);
+    const r=await fetch('/api/guest/'+token,{method:'POST',body:fd});if(r.ok)ok++;$('msg').textContent=`Uploaded ${ok} of ${files.length}…`}
+  $('msg').textContent=ok===files.length?`Thank you! ${ok} file(s) uploaded ✓`:`${ok} of ${files.length} uploaded — some failed (too large or unsupported).`;
+}
+$('drop').onclick=()=>$('file').click();$('file').onchange=e=>send(e.target.files);
+$('drop').ondragover=e=>{e.preventDefault();$('drop').classList.add('over')};
+$('drop').ondragleave=()=>$('drop').classList.remove('over');
+$('drop').ondrop=e=>{e.preventDefault();$('drop').classList.remove('over');send(e.dataTransfer.files)};
+</script></main></body></html>

@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Photo Drop — Dashboard</title><link rel="stylesheet" href="/style.css"></head><body><main>
+<div class="row"><h1>Photo Drop</h1><button class="ghost" id="logout">Sign out</button></div>
+<p class="muted" id="who"></p>
+<div id="pay" class="card" hidden>
+  <h2>Unlock for $10</h2><p class="muted">One-time payment. Lifetime access.</p>
+  <button id="payBtn">Pay $10</button>
+</div>
+<div id="setup" class="card" hidden>
+  <h2>Name your Drive folder</h2>
+  <input type="text" id="folderName" placeholder="e.g. Smith Wedding Photos" maxlength="100">
+  <button id="folderBtn">Create folder in my Drive</button>
+</div>
+<div id="main" hidden>
+  <div class="card">
+    <div class="row"><strong id="folderTitle"></strong></div>
+    <p class="muted">Share this link with guests:</p>
+    <p><code id="link"></code></p>
+    <div class="row"><button class="ghost" id="copy">Copy link</button><button class="ghost" id="rotate">Reset link</button></div>
+  </div>
+  <div class="card">
+    <div class="drop" id="drop">Drop photos here or click to choose<input type="file" id="file" multiple accept="image/*,video/*" hidden></div>
+    <div id="msg" class="muted"></div>
+  </div>
+  <h3>Recent uploads</h3><div class="grid" id="files"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const api=async(p,o={})=>{const r=await fetch(p,{headers:{'content-type':'application/json'},...o});if(r.status===401){location='/';throw 0}const j=await r.json();if(!r.ok)throw new Error(j.error);return j};
+async function render(me){
+  $('who').textContent='Signed in as '+me.email;
+  $('pay').hidden=me.paid; $('setup').hidden=!me.paid||!!me.folderName; $('main').hidden=!me.folderName;
+  if(me.folderName){$('folderTitle').textContent='📁 '+me.folderName;$('link').textContent=me.uploadUrl;loadFiles()}
+}
+async function loadFiles(){
+  const fs=await api('/api/files');
+  $('files').innerHTML='';
+  for(const f of fs){const a=document.createElement('a');a.href=f.webViewLink;a.target='_blank';a.rel='noopener';
+    if(f.thumbnailLink){const i=document.createElement('img');i.src=f.thumbnailLink;i.referrerPolicy='no-referrer';i.alt=f.name;a.append(i)}else a.textContent=f.name;
+    $('files').append(a)}
+}
+async function init(){
+  const sid=new URLSearchParams(location.search).get('session_id');
+  let me;
+  if(sid){me=await api('/api/checkout/confirm',{method:'POST',body:JSON.stringify({sessionId:sid})});history.replaceState({},'','/app')}
+  else me=await api('/api/me');
+  render(me);
+}
+$('payBtn').onclick=async()=>{$('payBtn').disabled=true;location=(await api('/api/checkout',{method:'POST'})).url};
+$('folderBtn').onclick=async()=>{const name=$('folderName').value.trim();if(!name)return;$('folderBtn').disabled=true;
+  try{render(await api('/api/folder',{method:'POST',body:JSON.stringify({name})}))}catch(e){alert(e.message);$('folderBtn').disabled=false}};
+$('copy').onclick=()=>navigator.clipboard.writeText($('link').textContent);
+$('rotate').onclick=async()=>{if(confirm('The old link will stop working. Continue?'))render(await api('/api/rotate-link',{method:'POST'}))};
+$('logout').onclick=async()=>{await api('/auth/logout',{method:'POST'});location='/'};
+async function send(files){
+  if(!files.length)return;const fd=new FormData();[...files].forEach(f=>fd.append('files',f));
+  $('msg').textContent='Uploading '+files.length+'…';
+  const r=await fetch('/api/upload',{method:'POST',body:fd});const j=await r.json();
+  $('msg').textContent=r.ok?'Uploaded '+j.uploaded+' file(s) ✓':j.error;if(r.ok)loadFiles();
+}
+$('drop').onclick=()=>$('file').click();$('file').onchange=e=>send(e.target.files);
+$('drop').ondragover=e=>{e.preventDefault();$('drop').classList.add('over')};
+$('drop').ondragleave=()=>$('drop').classList.remove('over');
+$('drop').ondrop=e=>{e.preventDefault();$('drop').classList.remove('over');send(e.dataTransfer.files)};
+init();
+</script></main></body></html>
